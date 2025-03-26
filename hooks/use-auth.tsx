@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useState } from "react"
 import { v4 as uuidv4 } from "uuid"
 import { useRouter } from "next/navigation"
 import type { AuthState, User } from "@/types/user"
+import { supabase } from "@/lib/supabase"
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<{ success: boolean; message: string }>
@@ -114,18 +115,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const logout = () => {
-    // Limpar estado de autenticação
-    setAuthState({
-      user: null,
-      isAuthenticated: false,
-    })
+  const logout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
 
-    // Remover usuário atual do localStorage
-    localStorage.removeItem("currentUser")
-
-    // Redirecionar para a página inicial
-    router.push("/")
+      setAuthState({
+        user: null,
+        isAuthenticated: false,
+      })
+      router.push("/")
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error)
+    }
   }
 
   return (

@@ -1,10 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { v4 as uuidv4 } from "uuid"
-
 import type { Transaction } from "@/types/transaction"
 import { useAuth } from "./use-auth"
+import { supabase } from "@/lib/supabase"
 
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -12,8 +11,7 @@ export function useTransactions() {
   const { user } = useAuth()
 
   useEffect(() => {
-    // Em uma aplicação real, isso seria uma requisição para uma API
-    const loadTransactions = () => {
+    const loadTransactions = async () => {
       if (!user) {
         setTransactions([])
         setIsLoading(false)
@@ -21,17 +19,15 @@ export function useTransactions() {
       }
 
       try {
-        // Verifica se temos transações no localStorage para este usuário
-        const storageKey = `transactions_${user.id}`
-        const savedTransactions = localStorage.getItem(storageKey)
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
 
-        if (savedTransactions) {
-          setTransactions(JSON.parse(savedTransactions))
-        } else {
-          // Para novos usuários, iniciar com um array vazio
-          setTransactions([])
-          localStorage.setItem(storageKey, JSON.stringify([]))
-        }
+        if (error) throw error
+
+        setTransactions(data || [])
       } catch (error) {
         console.error("Falha ao carregar transações:", error)
         setTransactions([])
@@ -41,23 +37,54 @@ export function useTransactions() {
     }
 
     loadTransactions()
+
+    // Inscrever-se para atualizações em tempo real
+    const channel = supabase
+      .channel('transactions_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'transactions',
+          filter: `user_id=eq.${user?.id}` 
+        }, 
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setTransactions(prev => [payload.new, ...prev])
+          } else if (payload.eventType === 'DELETE') {
+            setTransactions(prev => prev.filter(t => t.id !== payload.old.id))
+          } else if (payload.eventType === 'UPDATE') {
+            setTransactions(prev => prev.map(t => t.id === payload.new.id ? payload.new : t))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
   }, [user])
 
-  const addTransaction = (transaction: Omit<Transaction, "id">) => {
+  const addTransaction = async (transaction: Omit<Transaction, "id">) => {
     if (!user) return
 
-    const newTransaction = {
-      ...transaction,
-      id: uuidv4(),
-    }
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert({
+          ...transaction,
+          user_id: user.id,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single()
 
-    setTransactions((prev) => {
-      const updated = [...prev, newTransaction]
-      // Salva no localStorage com a chave específica do usuário
-      const storageKey = `transactions_${user.id}`
-      localStorage.setItem(storageKey, JSON.stringify(updated))
-      return updated
-    })
+      if (error) throw error
+
+      // A atualização do estado será feita através da inscrição em tempo real
+    } catch (error) {
+      console.error("Erro ao adicionar transação:", error)
+    }
   }
 
   return {
