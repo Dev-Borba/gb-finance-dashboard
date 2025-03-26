@@ -2,6 +2,7 @@
 
 Um dashboard moderno e intuitivo para gerenciamento de finanças pessoais, desenvolvido com Next.js e Tailwind CSS.
 
+![alt text](/img/image.png)
 ## 🚀 Funcionalidades
 
 - **Autenticação de Usuários**
