@@ -22,45 +22,19 @@ export function SocialLoginButton({ provider, className }: SocialLoginButtonProp
     setIsLoading(true)
 
     try {
-      // Simular um atraso como se estivéssemos fazendo autenticação real
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Criar um usuário simulado com base no provedor
-      const providerName = provider === "google" ? "Google" : "Microsoft"
-      const randomId = Math.floor(Math.random() * 10000)
-
-      const newUser = {
-        id: uuidv4(),
-        name: `Usuário ${providerName} ${randomId}`,
-        email: `usuario${randomId}@${provider === "google" ? "gmail.com" : "outlook.com"}`,
-        password: uuidv4(), // Senha aleatória que não será usada
-        createdAt: new Date().toISOString(),
-      }
-
-      // Buscar usuários existentes
-      const storedUsers = localStorage.getItem("users")
-      const users = storedUsers ? JSON.parse(storedUsers) : []
-
-      // Adicionar novo usuário
-      const updatedUsers = [...users, newUser]
-      localStorage.setItem("users", JSON.stringify(updatedUsers))
-
-      // Atualizar estado de autenticação
-      localStorage.setItem("currentUser", JSON.stringify(newUser))
-
-      // Notificar o usuário
-      toast({
-        title: "Login realizado com sucesso",
-        description: `Bem-vindo, ${newUser.name}!`,
-        variant: "default",
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: provider,
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`
+        }
       })
 
-      // Redirecionar para o dashboard
-      router.push("/dashboard")
+      if (error) {
+        throw error
+      }
 
-      // Forçar um reload para atualizar o estado de autenticação
-      // Em uma aplicação real, isso seria tratado pelo provedor de autenticação
-      window.location.href = "/dashboard"
+      // O redirecionamento será tratado pelo Supabase
+      // Não é necessário fazer nada aqui pois o usuário será redirecionado automaticamente
     } catch (error) {
       console.error(`Erro ao fazer login com ${provider}:`, error)
       toast({

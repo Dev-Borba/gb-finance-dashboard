@@ -23,47 +23,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   })
   const router = useRouter()
 
-  // Carregar estado de autenticação do localStorage ao iniciar
+  // Carregar estado de autenticação do Supabase ao iniciar
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser")
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const user: User = {
+          id: session.user.id,
+          name: session.user.user_metadata.name || session.user.email?.split("@")[0] || "",
+          email: session.user.email || "",
+          password: "",
+          createdAt: session.user.created_at,
+        }
         setAuthState({
           user,
           isAuthenticated: true,
         })
-      } catch (error) {
-        console.error("Erro ao carregar usuário:", error)
-        localStorage.removeItem("currentUser")
+      } else {
+        setAuthState({
+          user: null,
+          isAuthenticated: false,
+        })
       }
+    })
+
+    return () => {
+      subscription.unsubscribe()
     }
   }, [])
 
   const login = async (email: string, password: string) => {
-    // Simular uma chamada de API com um pequeno delay
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
     try {
-      // Buscar usuários do localStorage
-      const storedUsers = localStorage.getItem("users")
-      const users: User[] = storedUsers ? JSON.parse(storedUsers) : []
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-      // Verificar se o usuário existe e a senha está correta
-      const user = users.find((u) => u.email === email && u.password === password)
+      if (error) {
+        return { success: false, message: error.message }
+      }
 
-      if (!user) {
+      if (!data.user) {
         return { success: false, message: "Email ou senha incorretos" }
       }
 
-      // Atualizar estado de autenticação
+      const user: User = {
+        id: data.user.id,
+        name: data.user.user_metadata.name || data.user.email?.split("@")[0] || "",
+        email: data.user.email || "",
+        password: "", // Não armazenamos a senha
+        createdAt: data.user.created_at,
+      }
+
       setAuthState({
         user,
         isAuthenticated: true,
       })
-
-      // Salvar usuário atual no localStorage
-      localStorage.setItem("currentUser", JSON.stringify(user))
 
       return { success: true, message: "Login realizado com sucesso" }
     } catch (error) {
@@ -73,40 +87,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const register = async (name: string, email: string, password: string) => {
-    // Simular uma chamada de API com um pequeno delay
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
     try {
-      // Buscar usuários existentes do localStorage
-      const storedUsers = localStorage.getItem("users")
-      const users: User[] = storedUsers ? JSON.parse(storedUsers) : []
-
-      // Verificar se o email já está em uso
-      if (users.some((u) => u.email === email)) {
-        return { success: false, message: "Este email já está em uso" }
-      }
-
-      // Criar novo usuário
-      const newUser: User = {
-        id: uuidv4(),
-        name,
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        createdAt: new Date().toISOString(),
-      }
-
-      // Adicionar novo usuário à lista
-      const updatedUsers = [...users, newUser]
-      localStorage.setItem("users", JSON.stringify(updatedUsers))
-
-      // Atualizar estado de autenticação
-      setAuthState({
-        user: newUser,
-        isAuthenticated: true,
+        options: {
+          data: {
+            name,
+          },
+        },
       })
 
-      // Salvar usuário atual no localStorage
-      localStorage.setItem("currentUser", JSON.stringify(newUser))
+      if (error) {
+        return { success: false, message: error.message }
+      }
+
+      if (!data.user) {
+        return { success: false, message: "Erro ao criar conta" }
+      }
+
+      const user: User = {
+        id: data.user.id,
+        name: name,
+        email: data.user.email || "",
+        password: "", // Não armazenamos a senha
+        createdAt: data.user.created_at,
+      }
+
+      setAuthState({
+        user,
+        isAuthenticated: true,
+      })
 
       return { success: true, message: "Conta criada com sucesso" }
     } catch (error) {
